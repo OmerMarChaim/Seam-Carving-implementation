@@ -1,5 +1,3 @@
-import math
-
 import numpy as np
 
 
@@ -18,59 +16,13 @@ def get_greyscale_image(image, colour_wts):
     return greyscale_image
 
 
-# img=original_img
 def reshape_bilinear(image, new_shape):
-    # """
-    # Resizes an image to new shape using bilinear interpolation method
-    # :param image: The original image
-    # :param new_shape: a (height, width) tuple which is the new shape
-    # :returns: the image resized to new_shape
-    # """
-    # in_height, in_width, c = image.shape
-    # out_height, out_width = new_shape
-    # new_shape_with_color = (out_height, out_width, c)
-    #
-    # new_image = np.zeros(new_shape_with_color)
-    #
-    # width_ratio = (in_width) / out_width
-    # height_ratio = (in_height) / out_height
-    #
-    # def calc_flor(num):
-    #     if num == 0:
-    #         return 0
-    #     else:
-    #         return np.floor(num) if num != np.floor(num) else np.floor(num) - 1
-    #
-    # def calc_ciel(num,h_or_w):
-    #
-    #     return min(h_or_w - 1, np.ceil(num)) if x != np.ceil(num) else min(h_or_w - 1, np.ceil(num) + 1)
-    #
-    # for i in range(out_height):
-    #     for j in range(out_width):
-    #         # map the coordinates back to the original image
-    #         x = i * height_ratio
-    #         y = j * width_ratio
-    #         # calculate the coordinate values for 4 surrounding pixels.
-    #
-    #         x_floor = int(calc_flor(x))
-    #         x_ceil = int(calc_ciel(x,in_height))
-    #         y_floor = int(calc_flor(y))
-    #         y_ceil = int(calc_ciel(y,in_width))
-    #
-    #         c1 = image[x_floor, y_floor, :]
-    #         c2 = image[x_ceil, y_floor, :]
-    #         c3 = image[x_floor, y_ceil, :]
-    #         c4 = image[x_ceil, y_ceil, :]
-    #
-    #         t = (x - x_floor) / (x_ceil - x_floor)
-    #         s = (y - y_floor) / (y_ceil - y_floor)
-    #         c12 = (1 - t) * c1 + t * c2
-    #         c34 = (1 - t) * c3 + t * c4
-    #         res = (1 - s) * c12 + s * c34
-    #         new_image[i, j, :] = res
-    #
-    # ###**************####
-    # return new_image
+    """
+    Resizes an image to new shape using bilinear interpolation method
+    :param image: The original image
+    :param new_shape: a (height, width) tuple which is the new shape
+    :returns: the image resized to new_shape
+    """
 
     in_height, in_width, c = image.shape
     out_height, out_width = new_shape
@@ -111,8 +63,8 @@ def reshape_bilinear(image, new_shape):
             res = (1 - s) * c12 + s * c34
 
             new_image[i, j, :] = res
-
-    return new_image.astype(np.uint8)
+    new_image = new_image.astype(np.uint8)
+    return new_image
 
 
 def gradient_magnitude(image, colour_wts):
@@ -146,6 +98,23 @@ def paint_seams(new_img, image, colour):
     return image
 
 
+VERTICAL_HORIZONTAL = 0
+HORIZONTAL_VERTICAL = 1
+INTERMITTNET = 2
+
+
+def handle_vertical(number_of_seams_to_remove, new_img):
+    for i in range(number_of_seams_to_remove):
+        new_img = carve_column_visual(new_img)
+    return new_img
+
+
+def handle_horizontal(number_of_seams_to_remove, new_img):
+    rot_image = np.rot90(new_img)
+    new_img = handle_vertical(number_of_seams_to_remove, rot_image)
+    return np.rot90(new_img, 3)
+
+
 def visualise_seams(image, new_shape, carving_scheme, colour):
     """
     Visualises the seams that would be removed when reshaping an image to new image (see example in notebook)
@@ -159,35 +128,47 @@ def visualise_seams(image, new_shape, carving_scheme, colour):
     in_height, in_width, _ = image.shape
     out_height, out_width = new_shape
     new_img = image.copy()
-    number_of_seams_to_remove = in_width - out_width
-    for i in range(number_of_seams_to_remove):
-        new_img = carve_column_visual(new_img)
+    number_of_seams_to_remove: int
+    if carving_scheme == 0:
+        # VERTICAL_HORIZONTAL = 0
+        number_of_seams_to_remove = in_height - out_height
+        new_img = handle_horizontal(number_of_seams_to_remove, new_img)
+    if carving_scheme == 1:
+        # HORIZONTAL_VERTICAL = 1
+        number_of_seams_to_remove = in_width - out_width
+        new_img = handle_vertical(number_of_seams_to_remove, new_img)
+
+    if carving_scheme == 2:
+        # INTERMITTNET = 2
+
+        pass
+    #
+    # for i in range(number_of_seams_to_remove):
+    #     new_img = carve_column_visual(new_img)
     seam_image = paint_seams(new_img, image, colour)
     # seam_image = new_img
     return seam_image
 
-    return seam_image
-
 
 def minimum_seam(image):
-    r, c, _ = image.shape
-    energy_map = gradient_magnitude(image, [0.299, 0.587, 0.114])
+    in_height, in_width, _ = image.shape
+    gradient_map = gradient_magnitude(image, [0.299, 0.587, 0.114])
 
-    M = energy_map.copy()
+    M = gradient_map.copy()
     backtrack = np.zeros_like(M, dtype=np.int)
 
-    for i in range(1, r):
-        for j in range(0, c):
+    for i in range(1, in_height):
+        for j in range(0, in_width):
             if j == 0:
                 idx = np.argmin(M[i - 1, j:j + 2])
                 backtrack[i, j] = idx + j
-                min_energy = M[i - 1, idx + j]
+                min_value = M[i - 1, idx + j]
             else:
                 idx = np.argmin(M[i - 1, j - 1:j + 2])
                 backtrack[i, j] = idx + j - 1
-                min_energy = M[i - 1, idx + j - 1]
+                min_value = M[i - 1, idx + j - 1]
 
-            M[i, j] += min_energy
+            M[i, j] += min_value
     return M, backtrack
 
 
@@ -221,46 +202,37 @@ def reshape_seam_crarving(image, new_shape, carving_scheme):
     :param carving_scheme: the carving scheme to be used.
     :returns: the image resized to new_shape
     """
-    r, c, _ = image.shape
+    in_height, in_width, _ = image.shape
+    out_height, out_width = new_shape
     new_img = image.copy()
+    match carving_scheme:
+        case 0:
+            # VERTICAL_HORIZONTAL = 0
+            number_of_seams_to_remove = in_height - out_height
+            new_img = handle_horizontal(number_of_seams_to_remove, new_img)
+        case 1:
+            # HORIZONTAL_VERTICAL = 1
+            number_of_seams_to_remove = in_width - out_width
+            new_img = handle_vertical(number_of_seams_to_remove, new_img)
 
-    for i in range(c - new_shape[0]):
-        new_img = carve_column(new_img)
+        # find by vertival
+        case 2:
+            # INTERMITTNET = 2
+
+            pass
 
     seam_image = new_img
     return seam_image
 
 
-def minimum_seam(image):
-    r, c, _ = image.shape
-    energy_map = gradient_magnitude(image, [0.299, 0.587, 0.114])
+def carve_column(image):
+    in_height, in_width, _ = image.shape
 
-    M = energy_map.copy()
-    backtrack = np.zeros_like(M, dtype=np.int)
-
-    for i in range(1, r):
-        for j in range(0, c):
-            if j == 0:
-                idx = np.argmin(M[i - 1, j:j + 2])
-                backtrack[i, j] = idx + j
-                min_energy = M[i - 1, idx + j]
-            else:
-                idx = np.argmin(M[i - 1, j - 1:j + 2])
-                backtrack[i, j] = idx + j - 1
-                min_energy = M[i - 1, idx + j - 1]
-
-            M[i, j] += min_energy
-    return M, backtrack
-
-
-def carve_column(img):
-    r, c, _ = img.shape
-
-    M, backtrack = minimum_seam(img)
-    mask = np.ones((r, c), dtype=np.bool)
+    M, backtrack = minimum_seam(image)
+    mask = np.ones((in_height, in_width), dtype=np.bool)
     j = np.argmin(M[-1])
 
-    for i in reversed(range(r)):
+    for i in reversed(range(in_height)):
         mask[i, j] = False
         j = backtrack[i, j]
 
@@ -268,21 +240,21 @@ def carve_column(img):
 
     # Delete all the pixels marked False in the mask,
     # and resize it to the new image dimensions
-    new_img = img[mask]
-    img = img[mask].reshape((r, c - 1, 3))
+    img = image[mask].reshape((in_height, in_width - 1, 3))
 
     return img
 
 
-def carve_column_visual(img):
-    r, c, _ = img.shape
+def carve_column_visual(image):
+    in_height, in_width, _ = image.shape
+    in_height, in_width, _ = image.shape
 
-    M, backtrack = minimum_seam(img)
-    mask = np.ones((r, c), dtype=np.bool)
+    M, backtrack = minimum_seam(image)
+    mask = np.ones((in_height, in_width), dtype=np.bool)
     j = np.argmin(M[-1])
 
-    for i in reversed(range(r)):
-        img[i, j] = np.array([256, 256, 256])
+    for i in reversed(range(in_height)):
+        image[i, j] = np.array([256, 256, 256])
         mask[i, j] = False
         j = backtrack[i, j]
 
@@ -290,6 +262,5 @@ def carve_column_visual(img):
 
     # Delete all the pixels marked False in the mask,
     # and resize it to the new image dimensions
-    # img = img[mask].reshape((r, c - 1, 3))
 
-    return img
+    return image
