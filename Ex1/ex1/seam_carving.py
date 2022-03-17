@@ -202,24 +202,22 @@ def reshape_seam_crarving(image, new_shape, carving_scheme):
     :param carving_scheme: the carving scheme to be used.
     :returns: the image resized to new_shape
     """
+
     in_height, in_width, _ = image.shape
     out_height, out_width = new_shape
     new_img = image.copy()
-    match carving_scheme:
-        case 0:
-            # VERTICAL_HORIZONTAL = 0
-            number_of_seams_to_remove = in_height - out_height
-            new_img = handle_horizontal(number_of_seams_to_remove, new_img)
-        case 1:
-            # HORIZONTAL_VERTICAL = 1
-            number_of_seams_to_remove = in_width - out_width
-            new_img = handle_vertical(number_of_seams_to_remove, new_img)
+    if carving_scheme == 0:
+        # VERTICAL_HORIZONTAL = 0
+        number_of_seams_to_remove = in_height - out_height
+        new_img = handle_horizontal(number_of_seams_to_remove, new_img)
+    if carving_scheme == 1:
+        # HORIZONTAL_VERTICAL = 1
+        number_of_seams_to_remove = in_width - out_width
+        new_img = handle_vertical(number_of_seams_to_remove, new_img)
 
-        # find by vertival
-        case 2:
-            # INTERMITTNET = 2
-
-            pass
+    if carving_scheme == 2:
+        # INTERMITTNET = 2
+        pass
 
     seam_image = new_img
     return seam_image
