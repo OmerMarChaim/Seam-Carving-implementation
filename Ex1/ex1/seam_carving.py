@@ -74,80 +74,104 @@ def gradient_magnitude(image, colour_wts):
     :param colour_wts: the weights of each colour in rgb (> 0) 
     :returns: The gradient image
     """
-
-    ###Your code here###
-
     greyscale_image = get_greyscale_image(image, colour_wts)
-    height, width = greyscale_image.shape
-    gradient = np.zeros((height, width))
-    for i in range(height - 1):
-        for j in range(width - 1):
-            first_ecq = np.square(greyscale_image[i + 1][j] - greyscale_image[i, j])
-            second_ecq = np.square(greyscale_image[i, j + 1] - greyscale_image[i, j])
+    in_height, in_width = greyscale_image.shape
+    gradient = np.zeros((in_height, in_width))
+
+    for i in range(in_height):
+        for j in range(in_width):
+            if (i < (in_height - 1)) & (j < (in_width - 1)):
+                first_ecq = np.square(greyscale_image[i + 1][j] - greyscale_image[i, j])
+                second_ecq = np.square(greyscale_image[i, j + 1] - greyscale_image[i, j])
+            else:
+                first_ecq = np.square(greyscale_image[0][j] - greyscale_image[i, j])
+                second_ecq = np.square(greyscale_image[i, 0] - greyscale_image[i, j])
             gradient[i, j] = np.sqrt(first_ecq + second_ecq)
-    ###**************###
+
     return gradient
 
 
-def paint_seams(new_img, image, colour):
+def get_new_index_matrix(r, c):
+    index_matrix = np.zeros((r, c), dtype=tuple)
+
+    for i in range(r):
+        for j in range(c):
+            index_matrix[i][j] = (i, j)
+    return index_matrix
+
+
+def carve_column_visual(image, index_matrix):
     in_height, in_width, _ = image.shape
-    for i in range(in_width):
+    M, backtrack = minimum_seam(image)
+    mask = np.ones((in_height, in_width), dtype=np.bool)
+    j = np.argmin(M[-1])
+    for i in reversed(range(in_height)):
+        mask[i, j] = False
+        j = backtrack[i, j]
+
+    index_matrix = index_matrix[mask].reshape((in_height, in_width - 1))
+
+    mask = np.stack([mask] * 3, axis=2)
+
+    # Delete all the pixels marked False in the mask,
+    # and resize it to the new image dimensions
+    img = image[mask].reshape((in_height, in_width - 1, 3))
+    return index_matrix, img
+
+
+def calculate_visualise_seams(index_matrix, new_img, number_of_vertical):
+    for i in range(number_of_vertical):
+        index_matrix, new_img = carve_column_visual(new_img, index_matrix)
+
+    return index_matrix, new_img
+
+
+def get_valid_mask_matrix(mask, index_matrix):
+    pass
+
+
+def paint_the_seam(image, index_matrix, colour):
+    in_height, in_width, _ = image.shape
+    index_height, index_width = index_matrix.shape
+    demo_img = image.copy()
+    mask = np.ones((in_height, in_width), dtype=np.bool)
+
+    for i in range(index_height):
+        for j in range(index_width):
+            (x, y) = index_matrix[i][j]
+            mask[x][y] = False
+
+    for i in range(in_height):
         for j in range(in_width):
-            if new_img[i, j] == [256, 256, 256]:
-                image[i, j] = colour
-    return image
+            if mask[i][j]:
+                demo_img[i][j] = colour
+
+    return demo_img
 
 
-VERTICAL_HORIZONTAL = 0
-HORIZONTAL_VERTICAL = 1
-INTERMITTNET = 2
-
-
-def handle_vertical(number_of_seams_to_remove, new_img):
-    for i in range(number_of_seams_to_remove):
-        new_img = carve_column_visual(new_img)
-    return new_img
-
-
-def handle_horizontal(number_of_seams_to_remove, new_img):
-    rot_image = np.rot90(new_img)
-    new_img = handle_vertical(number_of_seams_to_remove, rot_image)
-    return np.rot90(new_img, 3)
-
-
-def visualise_seams(image, new_shape, carving_scheme, colour):
+def visualise_seams(image, new_shape, show_horizontal, colour):
     """
     Visualises the seams that would be removed when reshaping an image to new image (see example in notebook)
     :param image: The original image
     :param new_shape: a (height, width) tuple which is the new shape
-    :param carving_scheme: the carving scheme to be used.
+    :param show_horizontal: the carving scheme to be used.
     :param colour: the colour of the seams (an array of size 3)
     :returns: an image where the removed seams have been coloured.
     """
-    ###Your code here###
+    if show_horizontal:
+        image = np.rot90(image)
     in_height, in_width, _ = image.shape
-    out_height, out_width = new_shape
     new_img = image.copy()
-    number_of_seams_to_remove: int
-    if carving_scheme == 0:
-        # VERTICAL_HORIZONTAL = 0
-        number_of_seams_to_remove = in_height - out_height
-        new_img = handle_horizontal(number_of_seams_to_remove, new_img)
-    if carving_scheme == 1:
-        # HORIZONTAL_VERTICAL = 1
-        number_of_seams_to_remove = in_width - out_width
-        new_img = handle_vertical(number_of_seams_to_remove, new_img)
 
-    if carving_scheme == 2:
-        # INTERMITTNET = 2
+    index_matrix = get_new_index_matrix(in_height, in_width)
+    vertical_seams_to_remove = in_height - new_shape[0]
+    index_matrix, new_img = calculate_visualise_seams(index_matrix, new_img, vertical_seams_to_remove)
 
-        pass
-    #
-    # for i in range(number_of_seams_to_remove):
-    #     new_img = carve_column_visual(new_img)
-    seam_image = paint_seams(new_img, image, colour)
-    # seam_image = new_img
-    return seam_image
+    image = paint_the_seam(image, index_matrix, colour)
+    if show_horizontal:
+        image = np.rot90(image, 3)
+
+    return image
 
 
 def minimum_seam(image):
@@ -167,32 +191,10 @@ def minimum_seam(image):
                 idx = np.argmin(M[i - 1, j - 1:j + 2])
                 backtrack[i, j] = idx + j - 1
                 min_value = M[i - 1, idx + j - 1]
-
             M[i, j] += min_value
+
     return M, backtrack
 
-
-# def carve_column(img, mask):
-#     r, c, _ = img.shape
-#
-#     M, backtrack = minimum_seam(img)
-#     ##mask = np.ones((r, c), dtype=np.bool)
-#     j = np.argmin(M[-1])
-#
-#     for i in reversed(range(r)):
-#         mask[i, j] = False
-#         j = backtrack[i, j]
-#
-#     ##mask = np.stack([mask] * 3, axis=2)
-#
-#     # Delete all the pixels marked False in the mask,
-#     # and resize it to the new image dimensions
-#     ##img = img[mask].reshape((r, c - 1, 3))
-#
-#     return img, mask
-#     ###**************###
-#     # return seam_image
-#     pass
 
 def reshape_seam_crarving(image, new_shape, carving_scheme):
     """
@@ -202,24 +204,16 @@ def reshape_seam_crarving(image, new_shape, carving_scheme):
     :param carving_scheme: the carving scheme to be used.
     :returns: the image resized to new_shape
     """
-
     in_height, in_width, _ = image.shape
-    out_height, out_width = new_shape
     new_img = image.copy()
-    if carving_scheme == 0:
-        # VERTICAL_HORIZONTAL = 0
-        number_of_seams_to_remove = in_height - out_height
-        new_img = handle_horizontal(number_of_seams_to_remove, new_img)
-    if carving_scheme == 1:
-        # HORIZONTAL_VERTICAL = 1
-        number_of_seams_to_remove = in_width - out_width
-        new_img = handle_vertical(number_of_seams_to_remove, new_img)
 
-    if carving_scheme == 2:
-        # INTERMITTNET = 2
-        pass
+    for i in range(in_width - new_shape[0]):
+        new_img = carve_column(new_img)
+    new_img = np.rot90(new_img)
+    for i in range(in_height - new_shape[1]):
+        new_img = carve_column(new_img)
 
-    seam_image = new_img
+    seam_image = np.rot90(new_img, 3)
     return seam_image
 
 
@@ -241,24 +235,3 @@ def carve_column(image):
     img = image[mask].reshape((in_height, in_width - 1, 3))
 
     return img
-
-
-def carve_column_visual(image):
-    in_height, in_width, _ = image.shape
-    in_height, in_width, _ = image.shape
-
-    M, backtrack = minimum_seam(image)
-    mask = np.ones((in_height, in_width), dtype=np.bool)
-    j = np.argmin(M[-1])
-
-    for i in reversed(range(in_height)):
-        image[i, j] = np.array([256, 256, 256])
-        mask[i, j] = False
-        j = backtrack[i, j]
-
-    mask = np.stack([mask] * 3, axis=2)
-
-    # Delete all the pixels marked False in the mask,
-    # and resize it to the new image dimensions
-
-    return image
