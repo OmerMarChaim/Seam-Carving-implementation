@@ -91,11 +91,11 @@ def gradient_magnitude(image, colour_wts):
     return gradient
 
 
-def get_new_index_matrix(r, c):
-    index_matrix = np.zeros((r, c), dtype=tuple)
+def get_new_index_matrix(in_height, in_width):
+    index_matrix = np.zeros((in_height, in_width), dtype=tuple)
 
-    for i in range(r):
-        for j in range(c):
+    for i in range(in_height):
+        for j in range(in_width):
             index_matrix[i][j] = (i, j)
     return index_matrix
 
@@ -113,21 +113,15 @@ def carve_column_visual(image, index_matrix):
 
     mask = np.stack([mask] * 3, axis=2)
 
-    # Delete all the pixels marked False in the mask,
-    # and resize it to the new image dimensions
     img = image[mask].reshape((in_height, in_width - 1, 3))
     return index_matrix, img
 
 
-def calculate_visualise_seams(index_matrix, new_img, number_of_vertical):
-    for i in range(number_of_vertical):
+def calculate_visualise_seams(index_matrix, new_img, seams_to_remove):
+    for i in range(seams_to_remove):
         index_matrix, new_img = carve_column_visual(new_img, index_matrix)
 
     return index_matrix, new_img
-
-
-def get_valid_mask_matrix(mask, index_matrix):
-    pass
 
 
 def paint_the_seam(image, index_matrix, colour):
@@ -160,12 +154,13 @@ def visualise_seams(image, new_shape, show_horizontal, colour):
     """
     if show_horizontal:
         image = np.rot90(image)
+        new_shape = (new_shape[1], new_shape[0])
     in_height, in_width, _ = image.shape
     new_img = image.copy()
 
     index_matrix = get_new_index_matrix(in_height, in_width)
-    vertical_seams_to_remove = in_height - new_shape[0]
-    index_matrix, new_img = calculate_visualise_seams(index_matrix, new_img, vertical_seams_to_remove)
+    seams_to_remove = in_height - new_shape[0]
+    index_matrix, new_img = calculate_visualise_seams(index_matrix, new_img, seams_to_remove)
 
     image = paint_the_seam(image, index_matrix, colour)
     if show_horizontal:
@@ -196,6 +191,19 @@ def minimum_seam(image):
     return M, backtrack
 
 
+def handle_horizontal(new_img, seams_to_remove_width):
+    new_img = np.rot90(new_img)
+    for i in range(seams_to_remove_width):
+        new_img = carve_column(new_img)
+    return np.rot90(new_img, 3)
+
+
+def handle_vertical(new_img, seams_to_remove_height):
+    for i in range(seams_to_remove_height):
+        new_img = carve_column(new_img)
+    return new_img
+
+
 def reshape_seam_crarving(image, new_shape, carving_scheme):
     """
     Resizes an image to new shape using seam carving
@@ -206,14 +214,20 @@ def reshape_seam_crarving(image, new_shape, carving_scheme):
     """
     in_height, in_width, _ = image.shape
     new_img = image.copy()
+    seams_to_remove_height = in_height - new_shape[0]
+    seams_to_remove_width = in_width - new_shape[1]
+    if carving_scheme == 0:
+        new_img = handle_horizontal(new_img, seams_to_remove_height)
 
-    for i in range(in_width - new_shape[0]):
-        new_img = carve_column(new_img)
-    new_img = np.rot90(new_img)
-    for i in range(in_height - new_shape[1]):
-        new_img = carve_column(new_img)
+    elif carving_scheme == 1:
 
-    seam_image = np.rot90(new_img, 3)
+        new_img = handle_vertical(new_img, seams_to_remove_width)
+    else:
+        new_img = handle_vertical(new_img, seams_to_remove_width)
+        new_img = handle_horizontal(new_img, seams_to_remove_height)
+
+    seam_image = new_img
+
     return seam_image
 
 
@@ -229,9 +243,6 @@ def carve_column(image):
         j = backtrack[i, j]
 
     mask = np.stack([mask] * 3, axis=2)
-
-    # Delete all the pixels marked False in the mask,
-    # and resize it to the new image dimensions
     img = image[mask].reshape((in_height, in_width - 1, 3))
 
     return img
